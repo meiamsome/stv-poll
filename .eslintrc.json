@@ -1,0 +1,21 @@
+{
+  "extends": [
+    "react-app",
+    "standard"
+  ],
+  "plugins": [
+    "sort-destructure-keys"
+  ],
+  "rules": {
+    "comma-dangle": ["error", "always-multiline"],
+    "no-undef": "off",
+    "one-var": ["error", {
+      "initialized": "never",
+      "uninitialized": "always"
+    }],
+    "prefer-const": "error",
+    "sort-destructure-keys/sort-destructure-keys": "error",
+    "sort-keys": "error",
+    "sort-vars": "error"
+  }
+}
