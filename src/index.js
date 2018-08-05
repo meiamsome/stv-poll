@@ -1,14 +1,25 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import { Provider } from 'react-redux'
+import {
+  BrowserRouter,
+  Switch,
+  Route,
+} from 'react-router-dom'
 import './index.css'
 import App from './App'
+import Poll from './components/Poll'
 import * as serviceWorker from './serviceWorker'
 import store from './redux'
 
 ReactDOM.render((
   <Provider store={store}>
-    <App />
+    <BrowserRouter>
+      <Switch>
+        <Route exact path='/' component={App} />
+        <Route exact path='/poll/:id/' component={Poll} />
+      </Switch>
+    </BrowserRouter>
   </Provider>
 ), document.getElementById('root'))
 
