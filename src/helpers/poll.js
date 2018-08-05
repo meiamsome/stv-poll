@@ -1,18 +1,18 @@
 export function runPoll (optionCount, winnerCount, ballots) {
-  const droopLimit = Math.floor(ballots.length / (winnerCount + 1)) + 1
   const stages = []
-  const copiedBallots = [...Object.entries(ballots).map(([key, ballot]) => ({
-    choices: ballot,
+  const copiedBallots = Object.entries(ballots).map(([key, ballot]) => ({
+    choices: ballot.slice(),
     key,
     weighting: 1,
-  }))]
+  }))
+  const droopLimit = Math.floor(copiedBallots.length / (winnerCount + 1)) + 1
 
   let stage = {
     contenders: Array.from({ length: optionCount }, () => []),
-    discardedBallots: 0,
-    discardedBallotsFromWinning: 0,
+    discardedBallots: [],
     losers: [],
     winners: [],
+    winningBallots: Array.from({ length: optionCount }, () => null),
   }
 
   for (const ballot of copiedBallots) {
@@ -20,7 +20,7 @@ export function runPoll (optionCount, winnerCount, ballots) {
       const choice = ballot.choices.shift()
       stage.contenders[choice].push(ballot)
     } else {
-      stage.discardedBallots += 1
+      stage.discardedBallots.push(ballot)
     }
   }
   stages.push(stage)
@@ -30,21 +30,33 @@ export function runPoll (optionCount, winnerCount, ballots) {
       ...stage,
       // Disabled because the optional-chaining transform is interfering with this rule
       // eslint-disable-next-line no-loop-func
-      contenders: stage.contenders.map(arr => arr?.slice() || null),
+      contenders: [...stage.contenders.entries()].map(([key, arr]) => arr?.slice()?.map(ballot => ({
+        ...ballot,
+        from: key,
+      })) || null),
+      discardedBallots: stage.discardedBallots.map(ballot => ({
+        ...ballot,
+        from: 'discard',
+      })),
       losers: stage.losers.slice(),
       winners: stage.winners.slice(),
+      winningBallots: stage.winningBallots.slice(),
     }
 
-    let winners = [...stage.contenders.entries()]
+    const contenderScores = [...stage.contenders.entries()]
       .filter(([k, v]) => v !== null)
-      .filter(([k, v]) => v.map(({ weighting }) => weighting).reduce((a, b) => a + b, 0) >= droopLimit)
+      .map(([k, v]) => [k, v, v.map(({ weighting }) => weighting).reduce((a, b) => a + b, 0)])
+
+    let winners = contenderScores.filter(([k, v, score]) => score >= droopLimit)
 
     if (winners.length === 0) {
       // Disabled because the optional-chaining transform is interfering with this rule
       // eslint-disable-next-line no-restricted-globals
       if (stage.winners.length + stage.contenders.filter(v => v?.length > 0).length <= winnerCount) {
         // Winners by elimination
-        winners = [...stage.contenders.entries()].filter(([k, v]) => v !== null)
+        winners = [...stage.contenders.entries()]
+          .filter(([k, v]) => v !== null)
+          .map(([k, v]) => [k, v, v.map(({ weighting }) => weighting).reduce((a, b) => a + b, 0)])
       }
     }
 
@@ -52,35 +64,55 @@ export function runPoll (optionCount, winnerCount, ballots) {
       // Only take the current most-voted winner. Due to the way winning
       // ballots get redistributed, this choice can affect the result.
       // TODO: Verify this is a good choice
-      const [winnerId, votes] = winners.sort(([aK, aV], [bK, bV]) => bV.length - aV.length)[0]
-      const surplus = votes.length - droopLimit
-      if (surplus) {
+      const [winnerId, votes, score] = winners.sort(([aK, aV, aScore], [bK, bV, bScore]) => bScore - aScore)[0]
+      stage.contenders[winnerId] = null
+      const surplus = score - droopLimit
+      if (surplus > 0) {
         // Redistribute the 'surplus' of each individual ballot
         for (const { choices, weighting, ...ballot } of votes) {
-          if (choices.length) {
-            const choice = choices.shift()
+          let choice
+          let choiceValid = false
+
+          while (!choiceValid && choices.length) {
+            choice = choices.shift()
+            choiceValid = stage.contenders[choice]
+          }
+
+          if (choiceValid) {
             stage.contenders[choice].push({
               ...ballot,
               choices,
-              weighting: weighting * surplus / votes.length,
+              from: winnerId,
+              weighting: weighting * surplus / score,
             })
           } else {
-            stage.discardedBallotsFromWinning += weighting
+            stage.discardedBallots.push({
+              ...ballot,
+              choices,
+              from: winnerId,
+              weighting: weighting * surplus / score,
+            })
           }
         }
       }
+      const winningBallots = []
+      for (const { choices, weighting, ...ballot } of votes) {
+        winningBallots.push({
+          ...ballot,
+          from: winnerId,
+          weighting: weighting * Math.min(1, 1 - surplus / score),
+        })
+      }
+      stage.winningBallots[winnerId] = winningBallots
       stage.winners.push(winnerId)
-      stage.contenders[winnerId] = null
     } else {
       // Runoff the losers
 
-      const sortedContenders = [...stage.contenders.entries()]
-        .filter(([k, v]) => v !== null)
-        .sort(([aK, aV], [bK, bV]) => aV.length - bV.length)
+      const sortedContenders = contenderScores.sort(([aK, aV, aScore], [bK, bV, bScore]) => aScore - bScore)
 
-      const loserLength = sortedContenders[0][1].length
+      const loserScore = sortedContenders[0][2]
 
-      const losers = sortedContenders.filter(([_, x]) => x.length === loserLength)
+      const losers = sortedContenders.filter(([k, v, x]) => x === loserScore)
       const loserIds = losers.map(([k, v]) => k)
       // We can handle multiple losers because ballot weights don't get adjusted
       for (const [loserId, loser] of losers) {
@@ -95,9 +127,15 @@ export function runPoll (optionCount, winnerCount, ballots) {
           }
 
           if (choiceValid) {
-            stage.contenders[choice].push(ballot)
+            stage.contenders[choice].push({
+              ...ballot,
+              from: loserId,
+            })
           } else {
-            stage.discardedBallots += ballot.weighting
+            stage.discardedBallots.push({
+              ...ballot,
+              from: loserId,
+            })
           }
         }
         stage.contenders[loserId] = null
