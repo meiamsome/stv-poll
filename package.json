@@ -11,6 +11,7 @@
     "eslint-plugin-promise": "^3.8.0",
     "eslint-plugin-sort-destructure-keys": "^1.0.4",
     "eslint-plugin-standard": "^3.1.0",
+    "firebase": "^5.3.1",
     "react": "^16.4.2",
     "react-app-rewire-eslint": "^0.2.3",
     "react-app-rewired": "^2.0.0",
@@ -21,7 +22,8 @@
     "react-scripts": "2.0.0-next.3e165448",
     "redux": "^4.0.0",
     "redux-devtools-extension": "^2.13.5",
-    "redux-saga": "^0.16.0"
+    "redux-saga": "^0.16.0",
+    "redux-saga-firebase": "^0.14.0"
   },
   "scripts": {
     "start": "react-app-rewired start",
